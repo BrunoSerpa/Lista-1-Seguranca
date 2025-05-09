@@ -1,15 +1,17 @@
 # Faça um programa que leia arquivos de log e filtre apenas os logs de erro (logs de tipo "erro"). O programa deve retornar os logs de erro em um formato fácil de analisar.
 from buscaLogs import main as buscaLogs
 from escolherLog import main as escolherLog
-from re import fullmatch, search, IGNORECASE, match, compile
+from conteudoLog import main as conteudoLog
+from re import fullmatch, IGNORECASE, search
 
-def extrai_mensagem_adicional(bloco, header_index):
+def ajustaDescricao(descricoes):
     mensagem = []
-    grupo = []
-    for linha in bloco[header_index+1:]:
-        texto = linha.strip()
+    grupo = [] 
+    for descricao in descricoes:
+        texto = descricao.strip()
         if not texto:
             continue
+        # Ignora linhas que são só números, IPs ou timestamps
         if fullmatch(r'[\d\.:]+', texto):
             if grupo:
                 mensagem.append(" ".join(grupo))
@@ -20,75 +22,36 @@ def extrai_mensagem_adicional(bloco, header_index):
         mensagem.append(" ".join(grupo))
     return mensagem
 
-def processa_bloco(bloco, registros):
-    bloco_completo = ''.join(bloco)
-    if not search(r'erro', bloco_completo, IGNORECASE):
-        return
+def contemErro(listaDescricao):
+    for item in listaDescricao:
+        if search(r'erro', item, IGNORECASE):
+            return True
+    return False
 
-    header_line = None
-    header_index = None
-    for i, linha in enumerate(bloco):
-        if match(r'^\d{4}-\d{2}-\d{2}\s', linha):
-            header_line = linha
-            header_index = i
-            break
-    if not header_line:
-        return
-
-    header_regex = compile(
-        r'^(\d{4}-\d{2}-\d{2})\s+'
-        r'(\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+'
-        r'(.*?)'
-        r'\[(\d+)\]'
-    )
-    match = header_regex.search(header_line)
-    if not match:
-        return
-    data, horario, titulo, ip = match.groups()
-    ano, mes, dia = data.split('-')
-    hora, _ = horario.split('.')
-    data_formatada = f"{dia}/{mes}/{ano}"
-
-    mensagem_linhas = extrai_mensagem_adicional(bloco, header_index)
-    mensagem_str = "\n".join(mensagem_linhas)
-    registros.append((data_formatada, hora, titulo.strip(), ip, mensagem_str))
-
-def processa_log(log):
-    registros = []
-    try:
-        with open(log, 'r', encoding='utf8') as arquivo:
-            linhas = arquivo.readlines()
-
-        bloco = []
-        for linha in linhas:
-            if match(r'^\d{4}-\d{2}-\d{2}\s', linha) and bloco:
-                processa_bloco(bloco, registros)
-                bloco = []
-            bloco.append(linha)
-        if bloco:
-            processa_bloco(bloco, registros)
-    except Exception as e:
-        print(f"Erro ao ler o arquivo {log}: {e}")
-    return registros
-
-def main(logs=buscaLogs()):
+def main(logs):
     if not logs:
         print('Nenhum log encontrado.')
         return
 
-    log_escolhido = escolherLog(logs=logs)
-    print(f"Processando o log: {log_escolhido}")
-    registros = processa_log(log_escolhido)
-
+    registros = conteudoLog(escolherLog(logs))
     if not registros:
-        print("Nenhum registro de erro encontrado.")
+        print("Nenhum registro encontrado.")
     else:
+        mensagens = []
+        for posicao, ((ano, mes, dia), hora, titulo, ip, descricao) in enumerate(registros, start=1):
+            if not contemErro(descricao):
+                continue
+            mensagens.append(f"{posicao}º Registro - {titulo} | IP: {ip} (Data: {dia}/{mes}/{ano} | Hora: {hora}):")
+            textoErro = ''
+            for erro in ajustaDescricao(descricao):
+                textoErro += f'{erro}. '
+            mensagens.append(f'Descrição: {textoErro}')
+        if not mensagens:
+            print("Nenhum registro de erro encontrado.")
+            return
         print("Logs de erro encontrados:")
-        for i, (data_formatada, hora, titulo, ip, mensagem_str) in enumerate(registros, start=1):
-            print(f"{i}º Registro: {titulo} | IP: {ip} (Data: {data_formatada} | Hora: {hora}):")
-            if mensagem_str:
-                print(mensagem_str)
-            print("-" * 40)
+        for mensagem in mensagens:
+            print(mensagem)
 
 if __name__ == "__main__":
-    main()
+    main(buscaLogs())
