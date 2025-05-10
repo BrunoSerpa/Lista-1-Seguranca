@@ -1,7 +1,7 @@
 from os import path
 from buscaLogs import main as buscaLogs
 
-def main(logs):
+def main(logs = None):
     if not logs:
         logs = buscaLogs()
     print("Logs encontrados:")
